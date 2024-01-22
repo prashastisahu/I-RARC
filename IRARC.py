@@ -200,11 +200,6 @@ def configureproblem(data):
     for j in range(len(CAll)):
         for nl in unique_NL:
             # Constraint for Type 3 variable
-            # expr_rs = cplex.SparsePair(
-            #                         ind=["rs" + "c" + str(i) + "c" + str(j) + "nl" + str(nl) for i in range(len(CAll))] + ["ns" + "c" + str(j) + "nl" + str(nl)],
-            #                         val=[1] * len(CAll)  
-            # )
-            # Constraint for Type 3 variable
             ind=["rs" + "c" + str(i) + "c" + str(j) for i in range(len(CE))] + ["ns" + "c" + str(j)]
             
             # val gives the coefficients of the indicies, length of the list of ones is the same as the length of listOfNumbers.
@@ -218,7 +213,7 @@ def configureproblem(data):
                                 lin_expr= exp,
                                 senses=['E'],  # 'E' for equality
                                 rhs=[CBc.iloc[j]],  # Right-hand side of the constraint
-                                names=['constraint_c{}_nl{}'.format(j, nl)]  # Constraint name
+                                names=['constraint(3)_c{}_nl{}'.format(j, nl)]  # Constraint name
                                 )
 
 
@@ -240,7 +235,7 @@ def configureproblem(data):
                 lin_expr= exp,
                 senses= ['L'],
                 rhs= [0],
-                names= ['constraint_c{}_nl{}'.format(i,nl)]
+                names= ['constraint(4)_c{}_nl{}'.format(i,nl)]
             )
     
 
@@ -261,7 +256,7 @@ def configureproblem(data):
                 lin_expr= exp,
                 senses= ['L'],
                 rhs= [NBnl],
-                names= ['constraint_nl{}'.format(nl)]
+                names= ['constraint(5)_nl{}'.format(nl)]
             )
 
 
@@ -283,7 +278,7 @@ def configureproblem(data):
                         lin_expr= exp,
                         senses= ['L'],
                         rhs= [0],
-                        names= ['constraint_c{}_c{}'.format(i,j)]
+                        names= ['constraint(6)_c{}_c{}'.format(i,j)]
                     )
 
 
@@ -291,30 +286,20 @@ def configureproblem(data):
     # than that of any upstream connection ܿcj in the resulting RDD unless ܿci is disrupted (i.e., disci = 1). If ܿci is disrupted or there
     # is no edge from ܿcj to ܿci, this constraint is not applied. Constraint (7) is very important for integrating both resource assignment
     # and RDD construction with minimum connection disruptions.
-    for j in range(len(CAll)):
-            for i in range(len(CE)):
-                if i != j:
-                    # Constraint for Type 3 variable
-                    ind=["rs" + "c" + str(i) + "c" + str(j) for i in range(len(CE))] - M * ["e" + "c" + str(i) + "c" +str(j)] 
-            
-                    # val gives the coefficients of the indicies, length of the list of ones is the same as the length of listOfNumbers.
-                    val=[1] * len(CAll)
-
-                    # lin_expr is a matrix in list-of-lists format.
-                    exp = [[ind, val]]
-
-                    c.linear_constraints.add(
-                        lin_expr= exp,
-                        senses= ['L'],
-                        rhs= [0],
-                        names= ['constraint_c{}_c{}'.format(i,j)]
-                    )
-
-
-
-
-
-
+    # Create binary variables for disruption
+    # Add Constraint (7) to the CPLEX model
+    for i in range(len(CE)):
+        for j in range(len(CAll)):
+            if i != j:
+                c.linear_constraints.add(
+                    lin_expr=[[varnames_disc[i], varnames_edges[i * len(CAll) + j]]],
+                    senses=['L'],
+                    rhs=[M],
+                    names=['constraint(7)_' + str(i) + '_' + str(j)],
+                    indices=[disc.index(varnames_disc[i * len(CAll) + j]),
+                         edges.index(varnames_edges[i * len(CAll) + j])],
+                    coef=[1, -1]
+                )
 
 
 
