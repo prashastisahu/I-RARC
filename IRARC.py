@@ -57,6 +57,12 @@ import openpyxl
 import numpy as np
 
 def main():
+    data = 'irarc.xlsx'
+    
+    a = pd.read_excel(data)
+    print(a.shape)
+    configureproblem(data)
+    
     return
 
 def IRARC():
@@ -68,7 +74,13 @@ def writeresults():
 def writeexcelfile():
     return
 
+
+
+# Parameters and Sets
+
+
 def configureproblem(data):
+
 
     ##############################################################################
     
@@ -93,92 +105,99 @@ def configureproblem(data):
     #                     Read input data 
     
     ##############################################################################
-    
   
+    CE = pd.read_excel(data, sheet_name='Links' , usecols= ['Pre-config connections per  link'])  #set of existing connections per link 
+    CAll = pd.read_excel(data, sheet_name='Links' , usecols= ['Post-config connections per link']) #set of existing and new connections per link 
+    CBc = pd.read_excel(data, sheet_name='Connections' , usecols= ['No of slots required'])  #number of slots required by a connection c
+    NL = pd.read_excel(data, sheet_name='Links' , usecols= ['IP links (nl)']) #Network Links: Represents all links in the network
+            
+
+    # CE = CAll_nl.loc[0:58] # Existing Connections: All connections present before reconfiguration 
+    # CAll = CAll_nl.loc[:] #Total Connections: Includes 𝐶𝐸 and newly added connections.
    
-    # Parameters and Sets
-    CE_nl = pd.read_excel(data, sheet_name='IRARC' , usecols= ['Pre-config demands per link'])  #set of existing connections per link 
-    CAll_nl = pd.read_excel(data, sheet_name='IRARC' , usecols= ['Post-config demands per link']) #set of existing and new connections per link 
-    CBc = pd.read_excel(data, sheet_name='No of tributory slots required' , usecols= ['CBc'])  #number of slots required by a connection c
-    NL = pd.read_excel(data, sheet_name='Links' , usecols= ['IP links E']) #Network Links: Represents all links in the network
-         
+    print(CAll)
     
-    CE = CAll_nl.loc['d1':'d59', :] # Existing Connections: All connections present before reconfiguration 
-    CAll = CAll_nl.loc['d1':'d66', :] #Total Connections: Includes 𝐶𝐸 and newly added connections.
     
-    # Extract unique values from the 'IP links E' column
-    unique_NL = NL['IP links E'].unique()
+    # # Extract unique values from the 'IP links E' column
+    # unique_NL = NL['IP links E'].unique()
 
     NBnl = 32 #The total number of slots in a network link 𝑛l
     M = 1000 #A large constant number
     m = 0.0001 #A small constant number
 
 
+
+
     ######################################## Variables ##############################################
     
-    # Type 1: d𝑖𝑠𝑐𝑖(𝑐𝑖 ∈ 𝐶𝐸): A binary variable that indicates if an existing connection must be disrupted for completing the reconfiguration.
+
+
+    # 1.d𝑖𝑠𝑐𝑖(𝑐𝑖 ∈ 𝐶𝐸): A binary variable that indicates if an existing connection must be disrupted for completing the reconfiguration.
     #   Binary variable indicating if an existing connection must be disrupted.
-    #   Total number of this variable is equal to the number of connections in set C_E.
+    #   Total number of this variable is equal to the number of connections in set CE for a particular link.
     #   Create variable names for each existing connection in the form "disc0", "disc1", ..., "disc(len(CE)-1)"
-    varnames_disc = ["disc" + str(i) for i in range(len(CE))]
+    varnames_disc = ["disc" + str(i+1) for i in range(len(CE))]
     # Add binary variables to the CPLEX model
     disc = list(c.variables.add(
-                            obj=1,  # Objective coefficient 
+                            
+                            obj=[0] * len(CE), # Objective coefficient # Objective coefficient 
                             lb=[0] * len(CE),  # Lower bound (0 for binary)
                             ub=[1] * len(CE),  # Upper bound (1 for binary)
-                            types=[c.variables.type.binary] * len(CE),  # Type (binary)
+                            types=['B'] * len(CE),  # Type (binary)
                             names=varnames_disc
                             ))
 
 
 
-    # Type 2: 𝑒𝑐𝑖,𝑐𝑗(𝑐𝑖 ∈ 𝐶𝐸, 𝑐𝑗 ∈ 𝐶𝐴𝐿𝐿, 𝑐𝑖 ≠ 𝑐𝑗): A binary variable that indicates whether there is an edge from connection 𝑐𝑗 to connection 𝑐𝑖
+    # 2.𝑒𝑐𝑖,𝑐𝑗(𝑐𝑖 ∈ 𝐶𝐸, 𝑐𝑗 ∈ 𝐶𝐴𝐿𝐿, 𝑐𝑖 ≠ 𝑐𝑗): A binary variable that indicates whether there is an edge from connection 𝑐𝑗 to connection 𝑐𝑖
     #   in the resulting RDD where 0≤i<len(CE) and 0≤j<len(CAll).
     # Create variable names for each pair of connections in the form "ec0c1", "ec0c2", ..., "ec(len(CE)-1)c(len(CAll)-1)"
-    varnames_edges = ["e" + "c" + str(i) + "c" + str(j) for i in range(len(CE)) for j in range(len(CAll)) if i != j]
+    varnames_edges = ["e" + "c" + str(i+1) + "c" + str(j+1) for i in range(len(CE)) for j in range(len(CAll)) if i != j]
     # Add binary variables to the CPLEX model
     edges = list(c.variables.add(
-                            obj=1,  # Objective coefficient (could be set to 0 since it's a binary decision)
+                            obj=[0] * len(varnames_edges),  # Objective coefficient (could be set to 0 since it's a binary decision)
                             lb=[0] * len(varnames_edges),  # Lower bound (0 for binary)
                             ub=[1] * len(varnames_edges),  # Upper bound (1 for binary)
-                            types=[c.variables.type.binary] * len(varnames_edges),  # Type (binary)
+                            types=['B'] * len(varnames_edges),  # Type (binary)
                             names=varnames_edges
                             ))
     
 
-    # Type 3: rs𝑐𝑖,𝑐𝑗𝑛𝑙 (𝑛𝑙 ∈ 𝑁𝐿, 𝑐𝑖 ∈ 𝐶𝐸, 𝑐𝑗 ∈ 𝐶𝐴𝐿𝐿 ): An integer variable that indicates the number of slots assigned to 𝑐𝑗 after reconfiguration from the 
+    # 3. rs𝑐𝑖,𝑐𝑗𝑛𝑙 (𝑛𝑙 ∈ 𝑁𝐿, 𝑐𝑖 ∈ 𝐶𝐸, 𝑐𝑗 ∈ 𝐶𝐴𝐿𝐿 ): An integer variable that indicates the number of slots assigned to 𝑐𝑗 after reconfiguration from the 
     # slots that are occupied by 𝑐𝑖 before reconfiguration in a network link 𝑛𝑙.
     # Create variable names for each triple (connection, connection, network link)
-    varnames_rs = ["rs" + "c" + str(i) + "c" + str(j) for i in range(len(CAll)) for j in range(len(CAll)) for nl in unique_NL]
+    varnames_rs = ["rs" + "c" + str(i+1) + "c" + str(j+1) + "nl" + str(nl) for i in range(len(CAll)) for j in range(len(CAll)) for nl in NL['IP links (nl)']]
     # Add integer variables to the CPLEX model
     rs = list(c.variables.add(
-                        obj=0,  # Objective coefficient 
+                        obj=[0] * len(varnames_rs),  # Objective coefficient 
                         lb=[0] * len(varnames_rs),  # Lower bound (0 for integer)
                         ub=[cplex.infinity] * len(varnames_rs),  # Upper bound (could be set to a suitable upper limit)
-                        types=[c.variables.type.integer] * len(varnames_rs),  # Type (integer)
+                        types=['I'] * len(varnames_rs),  # Type (integer)
                         names=varnames_rs
                         ))
     
     
-    # Type 4: ns𝑐𝑗𝑛𝑙(𝑛𝑙 ∈ 𝑁𝐿, 𝑐𝑗 ∈ 𝐶𝐴𝐿𝐿𝑛𝑙 ): An integer variable that indicates the number of slots assigned to 𝑐𝑗 after reconfiguration among the 
+    # 4. rs𝑐𝑗𝑛𝑙(𝑛𝑙 ∈ 𝑁𝐿, 𝑐𝑗 ∈ 𝐶𝐴𝐿𝐿𝑛𝑙 ): An integer variable that indicates the number of slots assigned to 𝑐𝑗 after reconfiguration among the 
     # slots that are unoccupied by any connection before configuration in a network link 𝑛𝑙.
     # Create variable names for each pair (connection, network link)
-    varnames_ns = ["ns" + "c" + str(j)  for j in range(len(CAll)) for nl in unique_NL]
+    varnames_ns = ["ns" + "c" + str(j+1) + "nl" + str(nl) for j in range(len(CAll)) for nl in NL['IP links (nl)']]
     # Add integer variables to the CPLEX model
     ns = list(c.variables.add(
-                        obj=0,  # Objective coefficient (could be set to 0 since it's an integer decision)
+                        obj=[0] * len(varnames_ns),  # Objective coefficient (could be set to 0 since it's an integer decision)
                         lb=[0] * len(varnames_ns),  # Lower bound (0 for integer)
                         ub=[cplex.infinity] * len(varnames_ns),  # Upper bound (could be set to a suitable upper limit)
-                        types=[c.variables.type.integer] * len(varnames_ns),  # Type (integer)
+                        types=["I"] * len(varnames_ns),  # Type (integer)
                         names=varnames_ns
                         ))
     
 
-    ####################################### Constrainst ############################################
+    ####################################### Constraints ############################################
+
+
 
     # Remark: When a constraint has a variable on the right hand side or a variable multiplied with a parameter,
     # we need to bring it to the left hand side, otherwise cplex doesnt recognize it as a variable and only gets the index of it.
-    # All constraints for FT and AFT problem formulation are linear constraints.    
+    # All constraints for IRARC problem formulation are linear constraints.    
     # To add constraints with cplex we need these arguments: 
     #1. lin_expr - is a matrix in list-of-lists format. lin_expr contains: ind and val as arguments.
     #   ind - here we specify the variable type that is needed for the current constraint. Because CPLEX assigns unique index to 
@@ -197,109 +216,109 @@ def configureproblem(data):
     # cj after reconfiguration (CBcj) is equal to the total number of slots assigned to ܿcj, which includes the slots occupied by any 
     # connection before reconfiguration (∑ rs𝑐𝑗𝑛𝑙(𝑛𝑙 ∈ 𝑁𝐿, 𝑐𝑗 ∈ 𝐶𝐴𝐿𝐿𝑛𝑙 )) for  and the slots unoccupied before reconfiguration (݊nscjnl). 
     # Iterate over each connection and network link
-    for j in range(len(CAll)):
-        for nl in unique_NL:
-            # Constraint for Type 3 variable
-            ind=["rs" + "c" + str(i) + "c" + str(j) for i in range(len(CE))] + ["ns" + "c" + str(j)]
+    # for j in range(len(CAll)):
+    #     for nl in unique_NL:
+    #         # Constraint for Type 3 variable
+    #         ind=["rs" + "c" + str(i) + "c" + str(j) for i in range(len(CE))] + ["ns" + "c" + str(j)]
             
-            # val gives the coefficients of the indicies, length of the list of ones is the same as the length of listOfNumbers.
-            val=[1] * len(CAll)
+    #         # val gives the coefficients of the indicies, length of the list of ones is the same as the length of listOfNumbers.
+    #         val=[1] * len(CAll)
             
-            # lin_expr is a matrix in list-of-lists format. The first sub-list contains the list of indices (ind) and the second sub-list contains the list of coefficients (val)
-            exp = [[ind, val]]       
+    #         # lin_expr is a matrix in list-of-lists format. The first sub-list contains the list of indices (ind) and the second sub-list contains the list of coefficients (val)
+    #         exp = [[ind, val]]       
             
-            # Add a constraint for each network link and connection
-            c.linear_constraints.add(
-                                lin_expr= exp,
-                                senses=['E'],  # 'E' for equality
-                                rhs=[CBc.iloc[j]],  # Right-hand side of the constraint
-                                names=['constraint(3)_c{}_nl{}'.format(j, nl)]  # Constraint name
-                                )
+    #         # Add a constraint for each network link and connection
+    #         c.linear_constraints.add(
+    #                             lin_expr= exp,
+    #                             senses=['E'],  # 'E' for equality
+    #                             rhs=[CBc.iloc[j]],  # Right-hand side of the constraint
+    #                             names=['constraint(3)_c{}_nl{}'.format(j, nl)]  # Constraint name
+    #                             )
 
 
-    # Constraint of type 2: Constraint (eq 4)  ensures that, in a network link ݈݊, the total number of slots that are occupied by an 
-    # existing connection ci before reconfiguration and are also assigned to other connections after reconfiguration must not exceed 
-    # the required number of slots of ci.
-    for i in range(len(CE)):
-        for nl in unique_NL:
-            # Constraint for Type 3 variable
-            ind=["rs" + "c" + str(i) + "c" + str(j) for i in range(len(CE))] + ["ns" + "c" + str(j)]
+    # # Constraint of type 2: Constraint (eq 4)  ensures that, in a network link ݈݊, the total number of slots that are occupied by an 
+    # # existing connection ci before reconfiguration and are also assigned to other connections after reconfiguration must not exceed 
+    # # the required number of slots of ci.
+    # for i in range(len(CE)):
+    #     for nl in unique_NL:
+    #         # Constraint for Type 3 variable
+    #         ind=["rs" + "c" + str(i) + "c" + str(j) for i in range(len(CE))] + ["ns" + "c" + str(j)]
             
-            # val gives the coefficients of the indicies, length of the list of ones is the same as the length of listOfNumbers.
-            val=[1] * len(CE)
+    #         # val gives the coefficients of the indicies, length of the list of ones is the same as the length of listOfNumbers.
+    #         val=[1] * len(CE)
 
-            # lin_expr is a matrix in list-of-lists format.
-            exp = [[ind, val]]
+    #         # lin_expr is a matrix in list-of-lists format.
+    #         exp = [[ind, val]]
 
-            c.linear_constraints.add(
-                lin_expr= exp,
-                senses= ['L'],
-                rhs= [0],
-                names= ['constraint(4)_c{}_nl{}'.format(i,nl)]
-            )
+    #         c.linear_constraints.add(
+    #             lin_expr= exp,
+    #             senses= ['L'],
+    #             rhs= [0],
+    #             names= ['constraint(4)_c{}_nl{}'.format(i,nl)]
+    #         )
     
 
-    # Constraint of type 3: Constraint (eq 5) ensures that, in a network link ݈݊, the total number of slots that are unoccupied before reconfiguration 
-    # and are assigned to connections after reconfiguration should not exceed the total number of slots that are unoccupied before 
-    # reconfiguration.
-    for nl in unique_NL:
-            # Constraint for Type 3 variable
-            ind=["ns" + "c" + str(j) for j in range(len(CAll))] + ["CB" + "c" + str(i) for i in range(len(CE))] 
+    # # Constraint of type 3: Constraint (eq 5) ensures that, in a network link ݈݊, the total number of slots that are unoccupied before reconfiguration 
+    # # and are assigned to connections after reconfiguration should not exceed the total number of slots that are unoccupied before 
+    # # reconfiguration.
+    # for nl in unique_NL:
+    #         # Constraint for Type 3 variable
+    #         ind=["ns" + "c" + str(j) for j in range(len(CAll))] + ["CB" + "c" + str(i) for i in range(len(CE))] 
             
-            # val gives the coefficients of the indicies, length of the list of ones is the same as the length of listOfNumbers.
-            val=[1] * len(CAll)
+    #         # val gives the coefficients of the indicies, length of the list of ones is the same as the length of listOfNumbers.
+    #         val=[1] * len(CAll)
 
-            # lin_expr is a matrix in list-of-lists format.
-            exp = [[ind, val]]
+    #         # lin_expr is a matrix in list-of-lists format.
+    #         exp = [[ind, val]]
 
-            c.linear_constraints.add(
-                lin_expr= exp,
-                senses= ['L'],
-                rhs= [NBnl],
-                names= ['constraint(5)_nl{}'.format(nl)]
-            )
+    #         c.linear_constraints.add(
+    #             lin_expr= exp,
+    #             senses= ['L'],
+    #             rhs= [NBnl],
+    #             names= ['constraint(5)_nl{}'.format(nl)]
+    #         )
 
 
-    # Constraint of type 4: Constraint (eq 6) ensures that if at least one slot occupied by a connection ܿci before reconfiguration is 
-    # assigned to a connection ܿcj after reconfiguration in any network link, then ݁e(ci,cj) must be 1.
-    for j in range(len(CAll)):
-            for i in range(len(CE)):
-                if i != j:
-                    # Constraint for Type 3 variable
-                    ind=["rs" + "c" + str(i) + "c" + str(j) for i in range(len(CE))] - M * ["e" + "c" + str(i) + "c" +str(j)] 
+    # # Constraint of type 4: Constraint (eq 6) ensures that if at least one slot occupied by a connection ܿci before reconfiguration is 
+    # # assigned to a connection ܿcj after reconfiguration in any network link, then ݁e(ci,cj) must be 1.
+    # for j in range(len(CAll)):
+    #         for i in range(len(CE)):
+    #             if i != j:
+    #                 # Constraint for Type 3 variable
+    #                 ind=["rs" + "c" + str(i) + "c" + str(j) for i in range(len(CE))] - M * ["e" + "c" + str(i) + "c" +str(j)] 
             
-                    # val gives the coefficients of the indicies, length of the list of ones is the same as the length of listOfNumbers.
-                    val=[1] * len(CAll)
+    #                 # val gives the coefficients of the indicies, length of the list of ones is the same as the length of listOfNumbers.
+    #                 val=[1] * len(CAll)
 
-                    # lin_expr is a matrix in list-of-lists format.
-                    exp = [[ind, val]]
+    #                 # lin_expr is a matrix in list-of-lists format.
+    #                 exp = [[ind, val]]
 
-                    c.linear_constraints.add(
-                        lin_expr= exp,
-                        senses= ['L'],
-                        rhs= [0],
-                        names= ['constraint(6)_c{}_c{}'.format(i,j)]
-                    )
+    #                 c.linear_constraints.add(
+    #                     lin_expr= exp,
+    #                     senses= ['L'],
+    #                     rhs= [0],
+    #                     names= ['constraint(6)_c{}_c{}'.format(i,j)]
+    #                 )
 
 
-    # Constraint of Type 5: Constraint (7) ensures the constraint of AHC values, that is, the AHC value of a connection ܿci must be lower
-    # than that of any upstream connection ܿcj in the resulting RDD unless ܿci is disrupted (i.e., disci = 1). If ܿci is disrupted or there
-    # is no edge from ܿcj to ܿci, this constraint is not applied. Constraint (7) is very important for integrating both resource assignment
-    # and RDD construction with minimum connection disruptions.
-    # Create binary variables for disruption
-    # Add Constraint (7) to the CPLEX model
-    for i in range(len(CE)):
-        for j in range(len(CAll)):
-            if i != j:
-                c.linear_constraints.add(
-                    lin_expr=[[varnames_disc[i], varnames_edges[i * len(CAll) + j]]],
-                    senses=['L'],
-                    rhs=[M],
-                    names=['constraint(7)_' + str(i) + '_' + str(j)],
-                    indices=[disc.index(varnames_disc[i * len(CAll) + j]),
-                         edges.index(varnames_edges[i * len(CAll) + j])],
-                    coef=[1, -1]
-                )
+    # # Constraint of Type 5: Constraint (7) ensures the constraint of AHC values, that is, the AHC value of a connection ܿci must be lower
+    # # than that of any upstream connection ܿcj in the resulting RDD unless ܿci is disrupted (i.e., disci = 1). If ܿci is disrupted or there
+    # # is no edge from ܿcj to ܿci, this constraint is not applied. Constraint (7) is very important for integrating both resource assignment
+    # # and RDD construction with minimum connection disruptions.
+    # # Create binary variables for disruption
+    # # Add Constraint (7) to the CPLEX model
+    # for i in range(len(CE)):
+    #     for j in range(len(CAll)):
+    #         if i != j:
+    #             c.linear_constraints.add(
+    #                 lin_expr=[[varnames_disc[i], varnames_edges[i * len(CAll) + j]]],
+    #                 senses=['L'],
+    #                 rhs=[M],
+    #                 names=['constraint(7)_' + str(i) + '_' + str(j)],
+    #                 indices=[disc.index(varnames_disc[i * len(CAll) + j]),
+    #                      edges.index(varnames_edges[i * len(CAll) + j])],
+    #                 coef=[1, -1]
+    #             )
 
 
 
@@ -312,4 +331,25 @@ def configureproblem(data):
     # # Access the values of the binary variables
     # for name, edge in zip(varnames_edges, edges):
     #     print(f"{name}: {edge.solution_value}")
-    return
+    return c, disc, edges, rs, ns
+
+
+# Read data from the Excel sheets
+data = pd.ExcelFile('irarc.xlsx')
+
+# Call the function to get CPLEX object and variables
+c, disc, edges, rs, ns = configureproblem(data)
+
+# Print some basic information about the CPLEX object
+print("CPLEX Object Information:")
+print("Number of Variables:", c.variables.get_num())
+print("Number of Constraints:", c.linear_constraints.get_num())
+print("Objective Sense:", c.objective.get_sense())
+
+# Print information about each variable
+for variable in [disc, edges, rs, ns]:
+    print("\nVariable Type:", c.variables.get_types(variable))
+    print("Variable Names:", c.variables.get_names(variable))
+    print("Variable Lower Bounds:", c.variables.get_lower_bounds(variable))
+    print("Variable Upper Bounds:", c.variables.get_upper_bounds(variable))
+    print("Variable Objective Coefficients:", c.objective.get_linear(variable))
