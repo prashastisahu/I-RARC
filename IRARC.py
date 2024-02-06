@@ -56,6 +56,8 @@ from openpyxl import Workbook
 import openpyxl
 import numpy as np
 
+data = "irarc.xlsx"
+
 def Path():
     return
 
@@ -64,11 +66,17 @@ def main():
 
 def IRARC():
     c, var_type1, var_type2, var_type3, var_type4, CBc, CE, CAll, NL = configureproblem(data)
-    c.solve()
+    
+ 
+    # print(f"\n\n\nconstrants : {c.variables.get_names()}")
+    
+    # c.solve()
 
     return
 
 def writeresults():
+
+ 
     return
 
 def writeexcelfile(c, var_type1, var_type2, var_type3, var_type4, CBc, CE, CAll, NL):
@@ -112,7 +120,7 @@ def writeexcelfile(c, var_type1, var_type2, var_type3, var_type4, CBc, CE, CAll,
 
 
 def configureproblem(data):
-
+    
 
     ##############################################################################
     
@@ -138,21 +146,21 @@ def configureproblem(data):
     
     #########################################################################################################
   
-    CE = pd.read_excel(data, sheet_name='Links' , usecols= ['Pre-config connections per  link'])  #set of existing connections per link 
-    CAll = pd.read_excel(data, sheet_name='Links' , usecols= ['Post-config connections per link']) #set of existing and new connections per link 
+    
+    CAll = pd.read_excel(data, sheet_name='Connections' , usecols= ['C_All (CE + C_new)']) #set of existing and new connections per link 
+    CE = CAll[0:59]  #set of existing connections per link 
     CBc = pd.read_excel(data, sheet_name='Connections' , usecols= ['No of slots required'])  #number of slots required by a connection c
     NL = pd.read_excel(data, sheet_name='Links' , usecols= ['IP links (nl)']) #Network Links: Represents all links in the network
-            
+    slots_nl = pd.read_excel(data, sheet_name= 'Links', usecols= ["slots per link"]) # maximum number of slots per link     
 
     # CE = CAll_nl.loc[0:58] # Existing Connections: All connections present before reconfiguration 
     # CAll = CAll_nl.loc[:] #Total Connections: Includes 𝐶𝐸 and newly added connections.
    
     # print(CAll)
-
-
-    NBnl = 32 #The total number of slots in a network link 𝑛l
+    NBnl = 32 #The total number of slots per network
     M = 1000 #A large constant number
     m = 0.0001 #A small constant number
+
 
 
     #######################################################################################################
@@ -163,23 +171,21 @@ def configureproblem(data):
     
     # 1.d𝑖𝑠𝑐𝑖(𝑐𝑖 ∈ 𝐶𝐸): Binary variable indicating if an existing connection must be disrupted.
     #   Total number of this variable is equal to the number of connections in set CE for a particular link.
-    #   Variable names for each existing connection is in the form "disc0", "disc1", ..., "disc(len(CE)-1)"
     varnames_disc = ["disc" + str(i+1) for i in range(len(CE))]
-   
     var_type1 = list(c.variables.add(
                             obj=[1] * len(CE), 
                             lb=[0] * len(CE), 
                             ub=[1] * len(CE),  
                             types=['B'] * len(CE), 
                             names = varnames_disc
-                            ))
-
+                            )) 
+   
+    # print(varnames_disc)
+    
 
     # 2.𝑒𝑐𝑖,𝑐𝑗(𝑐𝑖 ∈ 𝐶𝐸, 𝑐𝑗 ∈ 𝐶𝐴𝐿𝐿, 𝑐𝑖 ≠ 𝑐𝑗): A binary variable that indicates whether there is an edge from connection 𝑐𝑗 to connection 𝑐𝑖
     # in the resulting RDD where 0≤i<len(CE) and 0≤j<len(CAll).
-    # Variable names for each pair of connections is in the form "ec1c2", "ec1c3", ..., "ec(len(CE)-1)c(len(CAll)-1)"
     varnames_edges = ["e" + "c" + str(i+1) + "c" + str(j+1) for i in range(len(CE)) for j in range(len(CAll)) if i != j]
-
     var_type2 = list(c.variables.add(
                             obj=[m] * len(varnames_edges),  
                             lb=[0] * len(varnames_edges),  
@@ -187,37 +193,57 @@ def configureproblem(data):
                             types=['B'] * len(varnames_edges), 
                             names = varnames_edges
                             ))
-    
+    # print(varnames_edges[3834])
 
     # 3. rs𝑐𝑖,𝑐𝑗𝑛𝑙 (𝑛𝑙 ∈ 𝑁𝐿, 𝑐𝑖 ∈ 𝐶𝐸, 𝑐𝑗 ∈ 𝐶𝐴𝐿𝐿 ): An integer variable that indicates the number of slots assigned to 𝑐𝑗 after reconfiguration from the 
     # slots that are occupied by 𝑐𝑖 before reconfiguration in a network link 𝑛𝑙.
-    # Variable names for each assignment of number of slots between ci and cj.
-    varnames_rs = ["rs" + "c" + str(i+1) + "c" + str(j+1) + "nl" + str(nl) for i in range(len(CE)) for j in range(len(CAll)) for nl in NL['IP links (nl)']]
-
+    varnames_rs = ["rs" + "c" + str(i+1) + "c" + str(j+1) + str(nl) for i in range(len(CE)) for j in range(len(CAll)) for nl in NL['IP links (nl)']]
     var_type3 = list(c.variables.add(
-                        obj=[0] * len(varnames_rs),  # Objective coefficient 
-                        lb=[0] * len(varnames_rs),  # Lower bound (0 for integer)
-                        ub=[cplex.infinity] * len(varnames_rs),  # Upper bound (could be set to a suitable upper limit)
-                        types=['I'] * len(varnames_rs),  # Type (integer)
+                        obj=[0] * len(varnames_rs),  
+                        lb=[0] * len(varnames_rs),
+                        ub=[cplex.infinity] * len(varnames_rs), 
+                        types=['I'] * len(varnames_rs),  
                         names=varnames_rs
                         ))
+    # print(varnames_rs[len(varnames_rs)-1])
     
-    
-    # 4. rs𝑐𝑗𝑛𝑙(𝑛𝑙 ∈ 𝑁𝐿, 𝑐𝑗 ∈ 𝐶𝐴𝐿𝐿𝑛𝑙 ): An integer variable that indicates the number of slots assigned to 𝑐𝑗 after reconfiguration among the 
+    # 4. ns𝑐𝑗𝑛𝑙(𝑛𝑙 ∈ 𝑁𝐿, 𝑐𝑗 ∈ 𝐶𝐴𝐿𝐿𝑛𝑙 ): An integer variable that indicates the number of slots assigned to 𝑐𝑗 after reconfiguration among the 
     # slots that are unoccupied by any connection before configuration in a network link 𝑛𝑙.
-    # Create variable names for each pair (connection, network link)
-    varnames_ns = ["ns" + "c" + str(j+1) + "nl" + str(nl) for j in range(len(CAll)) for nl in NL['IP links (nl)']]
-    # Add integer variables to the CPLEX model
+    varnames_ns = ["ns" + "c" + str(j+1)  + str(nl) for j in range(len(CAll)) for nl in NL['IP links (nl)']]
+  
     var_type4 = list(c.variables.add(
-                        obj=[0] * len(varnames_ns),  # Objective coefficient (could be set to 0 since it's an integer decision)
-                        lb=[0] * len(varnames_ns),  # Lower bound (0 for integer)
-                        ub=[cplex.infinity] * len(varnames_ns),  # Upper bound (could be set to a suitable upper limit)
-                        types=["I"] * len(varnames_ns),  # Type (integer)
+                        obj=[0] * len(varnames_ns), 
+                        lb=[0] * len(varnames_ns), 
+                        ub=[cplex.infinity] * len(varnames_ns),
+                        types=["I"] * len(varnames_ns),  
                         names=varnames_ns
                         ))
+    # print(varnames_ns[len(varnames_ns)-1])
+   
+    print(CBc.loc[1].values[0])
+    # 5. New variable: xci,k,nl (?) : A binary  variable indictaing if slot k is assigned to connection ci on network nl.
+    varnames_contig = ["x" + "c" + str(j+1) + 'k' + str(k+1)  + str(nl) for j in range(len(CAll)) for k in range(CBc.loc[j].values[0]) for nl in NL['IP links (nl)']]
+    var_type5 = list(c.variables.add(
+                        obj=[0] * len(varnames_contig), 
+                        lb=[0] * len(varnames_contig), 
+                        ub=[cplex.infinity] * len(varnames_contig),  
+                        types=["B"] * len(varnames_contig), 
+                        names=varnames_contig
+                        ))
     
-    # 5. New variable: xci,k,nl : A binary  variable indictaing if slot k is assigned to connection ci on network nl.
-    
+
+    # print(varnames_contig[len(varnames_contig)-1])
+
+    # 6. AHC variables:
+    varnames_ahc = ["ahc" + str(i+1) for i in range(len(CAll))]
+    var_type_ahc = list(c.variables.add(
+                        obj=[0] * len(varnames_ahc),
+                        lb=[0] * len(varnames_ahc),
+                        ub=[cplex.infinity] * len(varnames_ahc),
+                        types=["I"] * len(varnames_ahc),
+                        names=varnames_ahc
+                    ))
+    # print(varnames_ahc[len(varnames_ahc)-1])
 
     ##################################################################################################################
     
@@ -226,8 +252,9 @@ def configureproblem(data):
     ##################################################################################################################
     
     # Set the objective function coefficients
-    # c.objective.set_linear(list(zip( , )))
-
+    c.objective.set_sense(c.objective.sense.minimize)
+    c.objective.set_name("Total disruptions")#takes name string as parameter
+    c.objective.get_name()#returns the name given to the obj
 
 
     ###################################################################################################################
@@ -253,73 +280,86 @@ def configureproblem(data):
 
     # 1. Constraint of type 1: Constraint (eq 3) ensures that, in a network link ݈݊, the required number of slots by a connection
     # cj after reconfiguration (CBcj) is equal to the total number of slots assigned to ܿcj, which includes the slots occupied by any 
-    # connection before reconfiguration (∑ rs𝑐𝑗𝑛𝑙(𝑛𝑙 ∈ 𝑁𝐿, 𝑐𝑗 ∈ 𝐶𝐴𝐿𝐿𝑛𝑙 )) for  and the slots unoccupied before reconfiguration (݊nscjnl). 
-    # Iterate over each connection and network link
-    for nl in NL['IP links (nl)']:
-        for j in range(len(CAll)):
-            # Constraint for Type 1 ∑ rs𝑐𝑗𝑛𝑙(𝑛𝑙 ∈ 𝑁𝐿, 𝑐𝑗 ∈ 𝐶𝐴𝐿𝐿𝑛𝑙 ) + ݊nscjnl = CBc[j]
-            
-            #Constraint for Type 3 & 4 variable
-            ind = [var_type3[i+1] for i in range(len(CE))] + [var_type4[j]]
-                        
-            # val gives the coefficients of the indicies, length of the list of ones is the same as the length of listOfNumbers.
-            val = [1] * (len(CE) * len(CAll) * len(NL['IP links (nl)'])) + [1] * (len(CAll) * len(NL['IP links (nl)']))
-            
-            # lin_expr is a matrix in list-of-lists format. The first sub-list contains the list of indices (ind) and the second sub-list contains the list of coefficients (val)
-            exp = [[ind, val]]       
-            
-            # Add a constraint for each network link and connection
-            c.linear_constraints.add(
-                                lin_expr= exp,
-                                senses=['E'],  # 'E' for equality
-                                rhs=[CBc.iloc[j]],  # Right-hand side of the constraint
-                                names=['constraint(eq3)' + str(j) + '_' + str(nl)]  # Constraint name
-                                )
+    # connection before reconfiguration (∑ rs𝑐𝑗𝑛𝑙(𝑛𝑙 ∈ 𝑁𝐿, 𝑐𝑗 ∈ 𝐶𝐴𝐿𝐿𝑛𝑙 )) for and the slots unoccupied before reconfiguration (݊nscjnl). 
+    # for nl in NL['IP links (nl)']:
+    #     for j in range(len(CAll)):
+    #         #updated constraint for contiguity
+    #         ind = [var_type3[i] for i in range(len(CE))] + [var_type4[j]] + [var_type5[k] for k in range(CBc.iloc[j]) ]
 
+    #         val = [1] * (len(CE) * len(CAll) * len(NL['IP links (nl)'])) + [1] * (len(CAll) * len(NL['IP links (nl)']))
+            
+    #         exp = [[ind, val]]       
+            
+    #         c.linear_constraints.add(
+    #                             lin_expr= exp,
+    #                             senses=['E'],  # 'E' for equality
+    #                             rhs=[CBc.iloc[j]],  # Right-hand side of the constraint
+    #                             names=['constraint(eq3)' + str(j) + '_' + str(nl)]  # Constraint name
+    #                             )
+
+    indices= []
+    for nl in NL['IP links (nl)']:
+        for cj in CAll[nl]:
+            for ci in CE:
+                # Get the index of rs_ci_cj_nl
+                index_rs = varnames_rs.index("rs" + str(ci) +  str(cj) + str(nl))
+                indices.append(var_type3[index_rs])
+
+                # Get the index of ns_cj_nl
+                index_ns = varnames_ns.index("ns" + "c" + str(cj) + str(nl))
+                indices.append(var_type4[index_ns])
+                
+    ind = indices
+    val = [1] * len(indices)
+    
+    exp = [[ind, val]]       
+            
+    c.linear_constraints.add(
+                        lin_expr= exp,
+                        senses=['E'],  # 'E' for equality
+                        rhs=[CBc.iloc[j]],  # Right-hand side of the constraint
+                        names=['constraint(eq3)' + str(j) + '_' + str(nl)]  # Constraint name
+                        )
    
 
 
     # # 2. Constraint of type 2: Constraint (eq 4) ensures that, in a network link݈, the total number of slots that are occupied by an 
     # # existing connection ci before reconfiguration and are also assigned to other connections after reconfiguration must not exceed 
     # # the required number of slots of ci.
-    for nl in NL['IP links (nl)']:
-        for i in range(len(CE)):
-            # Constraint for Type 3 variable
-            ind = [var_type3[j] for j in range(len(CAll)) if j != i]
+    # for nl in NL['IP links (nl)']:
+    #     for i in range(len(CE)):
+    #         # Constraint for Type 3 variable
+    #         ind = [var_type3[j] for j in range(len(CAll)) if j != i]
             
-            # val gives the coefficients of the indicies.
-            val = [1] * len(ind)
+    #         val = [1] * len(ind)
 
-            # lin_expr is a matrix in list-of-lists format.
-            exp = [[ind, val]]
+    #         exp = [[ind, val]]
 
-            c.linear_constraints.add(
-                lin_expr= exp,
-                senses= ['L'],
-                rhs=[CBc.iloc[i]],  # Right-hand side of the constraint
-                names=['constraint(eq4)' + str(i) + '_' + str(nl)]  # Constraint name
-            )
+    #         c.linear_constraints.add(
+    #             lin_expr= exp,
+    #             senses= ['L'],
+    #             rhs=[CBc.iloc[i]], 
+    #             names=['constraint(eq4)' + str(i) + '_' + str(nl)]  
+    #         )
     
 
     # 3. Constraint of type 3: Constraint (eq 5) ensures that, in a network link ݈݊, the total number of slots that are unoccupied before reconfiguration 
     # and are assigned to connections after reconfiguration should not exceed the total number of slots that are unoccupied before 
     # reconfiguration.
-    for nl in NL['IP links (nl)']:
-            # Constraint for Type 3 variable
-            ind = [var_type4[j] for j in range(len(CAll))] +  [CBc.iloc[i] for i in range(len(CE))] 
-            
-            # val gives the coefficients of the indicies.
-            val=[1] * len(ind)
+    # for nl in NL['IP links (nl)']:
+    #         # Constraint for Type 3 variable
+    #         ind = [var_type4[j] for j in range(len(CAll))] +  [CBc.iloc[i] for i in range(len(CE))] 
 
-            # lin_expr is a matrix in list-of-lists format.
-            exp = [[ind, val]]
+    #         val=[1] * len(ind)
 
-            c.linear_constraints.add(
-                lin_expr= exp,
-                senses= ['L'],
-                rhs= [NBnl],
-                names= ['constraint(eq5)' + str(i) + '_' + str(j)]
-            )
+    #         exp = [[ind, val]]
+
+    #         c.linear_constraints.add(
+    #             lin_expr= exp,
+    #             senses= ['L'],
+    #             rhs= [NBnl],
+    #             names= ['constraint(eq5)' + str(i) + '_' + str(j)]
+    #         )
 
 
     # 4. Constraint of type 4: Constraint (eq 6) ensures that if at least one slot occupied by a connection ܿci before reconfiguration is 
@@ -328,7 +368,7 @@ def configureproblem(data):
             for i in range(len(CE)):
                 if i != j:
                     # Constraint for Type 3 variable
-                    ind=[var_type2[i]] +  [var_type3[i,j]] 
+                    ind=[var_type2[i]] +  [var_type3[i]] 
             
                     val=[1, -M ]
 
@@ -338,13 +378,41 @@ def configureproblem(data):
                         lin_expr= exp,
                         senses= ['L'],
                         rhs= [0],
-                        names= ['constraint(6)_c{}_c{}'.format(i,j)]
+                        names= ['constraint(eq6)_c{}_c{}'.format(i,j)]
                     )
 
-    # 5. Constraint 5: Doubt
+    # 5. Constraint 5: Doubt(?) Constraints for AHC
+    # for i in CE:
+    #     for j in CAll:
+    #         if i != c:
+    #             ind = var_type1[i], var_type2[i * len(CAll) + j], var_type_ahc[j]
+    #             Val = [M, -M, -1, 1]
+
+    #             c.linear_constraints.add(
+    #                 lin_expr=[[ind, val]],
+    #                 senses=['G'],
+    #                 rhs=[0],
+    #                 names=['constraint_AHC_c{}_c{}'.format(i, j)],
+                
+    #             )
+
                     
     # 6. New Constraint: Contiguity constraint ensures that if two slots k and k+1 are assigned to the same connection ci on network link nl, there cannot be a slot k` such that k < K` < k+1 which is not assigned to ci. 
-    # 
+    # for j in range(len(CAll)):
+    #     for nl in NL['IP links (nl)']:
+    #         for k in range(CBc.iloc[j] - 1):
+    #             # Constraint for contiguity
+    #             ind = [var_type5[k + 1], var_type5[k + 2]]
+    #             val = [1, -1]
+    #             exp = [[ind, val]]
+
+    #             # Add the constraint
+    #             c.linear_constraints.add(
+    #                 lin_expr=exp,
+    #                 senses=['L'],  # 'L' for less than or equal to
+    #                 rhs=[0],
+    #                 names=['contiguity_constraint_c{}_nl{}_k{}'.format(j + 1, nl, k + 1)]
+    #             )
 
     
 
@@ -352,3 +420,5 @@ def configureproblem(data):
     return c, var_type1, var_type2, var_type3, var_type4, CE, CAll, CBc, NL
 
 
+
+IRARC()
