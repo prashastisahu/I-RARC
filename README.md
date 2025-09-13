@@ -1,46 +1,60 @@
-# I-RARC
-ILP-based Resource Assignment and RDD Construction.
+# I-RARC: Incremental Resource Assignment and Reconfiguration Model
 
-Objective: Implement the I-RARC.
-• Implementation:
-• This Python script implements and runs the I-RARC algorithm.
-• The script is designed such that it can be used for any arbitrarily defined 
-network topology and traffic matrix.
+## Overview
 
-Input:
-o OTN network topology, which includes parameters such as link costs and link 
-capacities (i.e. type of HO-ODU and the type of tributary slot used).
-o Traffic matrix of ODU demands and their corresponding routing and grooming.
-(Note: the traffic matrix implicitly defines the bandwidths (BWs) of the LOODUs.)
-o Note: the routing and grooming of LO-ODUs above is non-optimum, i.e. the 
-capacity is not efficiently utilized, and thus, future traffic demand requests may 
-get blocked.
-o The input above can be for instance be defined in an excel file.
+The I-RARC (Incremental Resource Assignment and Reconfiguration) model is an optimization framework designed to minimize connection disruptions during network reconfiguration while efficiently allocating network resources. This implementation uses CPLEX to solve the linear programming problem.
 
-Output:
-o The I-RARC calculates the optimum routing and grooming of LO-ODUs and 
-the migration strategy needed to reconfigure the LO-ODUs into their optimized 
-grooming and routing. This output has to be delivered as an excel file. Notice 
-that this output corresponds to the optimum decision variables calculated after 
-solving the I-RARC.
-o The calculation of the output implies the following steps:
-• Step 1: Determine globally-optimized routes
-• Input: sub-optimum routing of ODU demands.
-• Method: Apply conventional ILP-based routing algorithms. Note: 
-this step is not solved by the I-RARC!
-• Step 2: Perform resource assignment and RDD construction
-• Input: sub-optimum routing and grooming of ODU demands.
-• Method: Apply the I-RARC to optimize the migration strategy that 
-minimizes the number of disruptions.
-• Step 3: Determine the order of connection migrations
-• Input: decision variables optimized by the I-RARC.
-• Method: the decision variables are post-processed as to determine 
-the order of connection migrations.
+## Problem Description
 
-Design specifications. The I-RARC conforms to the following specifications:
-o I-RARC output:
-o Set of disrupted connections.
-o Constructed Routing Dependency Diagram (RDD).
-o Resource assignment for network links.
-o I-RARC decision variables and parameters (i.e. constant values).
-o Objective Function:To Minimize the number of connections disrupted during migration.
+When network topologies need to be reconfigured (e.g., adding new connections, changing routing), existing connections may need to be disrupted. The I-RARC model finds the optimal reconfiguration strategy that:
+
+- **Minimizes the number of disrupted existing connections**
+- **Efficiently allocates network slots** across all links
+- **Maintains network resource constraints**
+- **Creates an optimal Reconfiguration Dependency Diagram (RDD)**
+
+## Model Formulation
+
+### Decision Variables
+
+1. **`disc_i`** (Binary): Whether existing connection `i` must be disrupted
+2. **`e_ci_cj`** (Binary): Whether there's an edge from connection `j` to connection `i` in the RDD
+3. **`rs_ci_cj_nl`** (Integer): Number of slots assigned to connection `j` from connection `i`'s slots in link `nl`
+4. **`ns_cj_nl`** (Integer): Number of new slots assigned to connection `j` in link `nl`
+
+### Objective Function
+
+```
+Minimize: Σ disc_i + m * Σ e_ci_cj
+```
+
+Where `m` is a small constant (0.0001) to break ties.
+
+### Constraints
+
+1. **Slot Conservation**: Total slots assigned to each connection equals its requirement
+2. **Resource Limits**: Slots reassigned from existing connections don't exceed their capacity
+3. **Available Capacity**: New slot assignments don't exceed available unoccupied slots
+4. **RDD Edge Logic**: If slots are reassigned, corresponding RDD edges must be activated
+5. **AHC Ordering**: Maintains proper ordering in the Reconfiguration Dependency Diagram
+
+## Input Data Requirements
+
+The model expects an Excel file with the following sheets:
+
+### Sheet: 'IRARC'
+- **Pre-config demands per link**: Existing connections per network link
+- **Post-config demands per link**: All connections (existing + new) per network link
+
+### Sheet: 'No of tributory slots required'
+- **CBc**: Number of slots required by each connection
+
+### Sheet: 'Links'
+- **IP links E**: List of all network links
+
+## License
+This implementation is provided for academic and research purposes. CPLEX licensing terms apply separately.
+
+## Authors
+
+- Prashasti Sahu
